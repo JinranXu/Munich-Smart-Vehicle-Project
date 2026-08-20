@@ -1,0 +1,50 @@
+class StudentController: 
+def __init__(self) -> None: 
+
+
+self.KP = 0.17 
+
+self.KI = 0.003 
+
+self.integral_error = 0.0 
+def reset(self) -> None: 
+self.integral_error = 0.0 
+def update(self, observation: Observation) -> ControlCommand: 
+speed_error = observation.target_speed - observation.speed 
+
+candidate_integral = ( 
+self.integral_error 
++ speed_error * observation.dt
+) 
+
+candidate_raw_command = ( 
+self.KP * speed_error 
++ self.KI * candidate_integral 
+) 
+
+if -1.0 <= candidate_raw_command <= 1.0: 
+self.integral_error = candidate_integral 
+elif candidate_raw_command > 1.0 and speed_error < 0.0: 
+self.integral_error = candidate_integral 
+elif candidate_raw_command < -1.0 and speed_error > 0.0: 
+self.integral_error = candidate_integral 
+
+raw_command = ( 
+self.KP * speed_error 
++ self.KI * self.integral_error 
+) 
+signed_command = clamp(raw_command, -1.0, 1.0) 
+
+steering = pure_pursuit_steering(observation) 
+# Prevent throttle and brake from being active together 
+if signed_command >= 0.0: 
+throttle = signed_command 
+brake = 0.0 
+else: 
+throttle = 0.0 
+brake = -signed_command 
+return ControlCommand( 
+throttle=throttle, 
+brake=brake, 
+steering=steering, 
+)
