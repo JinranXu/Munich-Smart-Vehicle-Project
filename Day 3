@@ -24,110 +24,53 @@ class StudentController:
         self.integral_error = 0.0 
  
     def preview_distance(self, speed: float) -> float: 
-        return clamp( 
-            self.BASE_LOOKAHEAD_M + self.SPEED_GAIN_S * speed, 
-            3.0, 
-            24.0, 
-        ) 
+        return clamp( self.BASE_LOOKAHEAD_M + self.SPEED_GAIN_S * speed, 3.0, 24.0, ) 
  
     def update(self, observation: Observation) -> ControlCommand: 
        
-        desired_gap = ( 
-            self.STANDSTILL_GAP_M 
-            + self.TIME_HEADWAY_S * observation.speed 
-        ) 
+        desired_gap = ( self.STANDSTILL_GAP_M + self.TIME_HEADWAY_S * observation.speed ) 
 
 
         selected_target = observation.target_speed 
         mode = "CRUISE" 
  
         if observation.lead_detected: 
-            gap_error = ( 
-                observation.lead_distance 
-                - desired_gap 
-            ) 
- 
-            acc_target = ( 
-                observation.speed 
-                + self.GAP_GAIN_PER_S * gap_error 
-                - self.CLOSING_GAIN * observation.closing_speed 
-            ) 
- 
-            selected_target = min( 
-                observation.target_speed, 
-                max(0.0, acc_target), 
-            ) 
+            gap_error = ( observation.lead_distance - desired_gap ) 
+            acc_target = ( observation.speed + self.GAP_GAIN_PER_S * gap_error - self.CLOSING_GAIN * observation.closing_speed ) 
+            selected_target = min( observation.target_speed, max(0.0, acc_target), ) 
  
             mode = "ACC" 
  
-            if ( 
-                observation.lead_distance <= 3.0 
-                or observation.time_to_collision <= 1.0 
-            ): 
+            if ( observation.lead_distance <= 3.0 or observation.time_to_collision <= 1.0 ): 
                 selected_target = 0.0 
                 mode = "EMERGENCY" 
  
-       
+
+
         speed_error = selected_target - observation.speed 
+        candidate_integral = (self.integral_error + speed_error * observation.dt ) 
+        candidate_raw = (self.KP * speed_error + self.KI * candidate_integral ) 
  
-        candidate_integral = ( 
-            self.integral_error 
-            + speed_error * observation.dt 
-        ) 
- 
-        candidate_raw = ( 
-            self.KP * speed_error 
-            + self.KI * candidate_integral 
-        ) 
- 
-        if ( 
-            -1.0 <= candidate_raw <= 1.0 
-            or ( 
-                candidate_raw > 1.0 
-                and speed_error < 0.0 
-            ) 
-            or ( 
-                candidate_raw < -1.0 
-                and speed_error > 0.0 
-            ) 
-        ): 
+        if ( -1.0 <= candidate_raw <= 1.0 or ( candidate_raw > 1.0 and speed_error < 0.0 ) 
+            or ( candidate_raw < -1.0 and speed_error > 0.0 ) ): 
+
             self.integral_error = candidate_integral 
- 
-        signed_command = clamp( 
-            self.KP * speed_error 
-            + self.KI * self.integral_error, 
-            -1.0, 
-            1.0, 
-        ) 
- 
+
+
+        signed_command = clamp( self.KP * speed_error + self.KI * self.integral_error, -1.0, 1.0, ) 
+
         dx = observation.preview_x - observation.x 
         dy = observation.preview_y - observation.y 
+
  
         target_bearing = math.atan2(dy, dx) 
  
-        alpha = ( 
-            target_bearing 
-            - observation.heading 
-            + math.pi 
-        ) % (2.0 * math.pi) - math.pi 
+        alpha = ( target_bearing - observation.heading + math.pi ) % (2.0 * math.pi) - math.pi 
  
-        geometric_lookahead = max( 
-            1.0, 
-            math.hypot(dx, dy), 
-        ) 
+        geometric_lookahead = max( 1.0, math.hypot(dx, dy), ) 
  
-        steering = math.atan2( 
-            2.0 
-            * self.WHEELBASE_M 
-            * math.sin(alpha), 
-            geometric_lookahead, 
-        ) 
- 
-        steering = clamp( 
-            steering, 
-            -self.MAX_STEERING_RAD, 
-            self.MAX_STEERING_RAD, 
-        ) 
+        steering = math.atan2( 2.0 * self.WHEELBASE_M * math.sin(alpha), geometric_lookahead, ) 
+        steering = clamp( steering, -self.MAX_STEERING_RAD, self.MAX_STEERING_RAD, ) 
  
        
         if signed_command >= 0.0: 
@@ -137,11 +80,4 @@ class StudentController:
             throttle = 0.0 
             brake = -signed_command 
  
-        return ControlCommand( 
-            throttle=throttle, 
-            brake=brake, 
-            steering=steering, 
-            selected_target_speed=selected_target, 
-            desired_gap=desired_gap, 
-            mode=mode, 
-        )
+        return ControlCommand( throttle=throttle, brake=brake, steering=steering, selected_target_speed=selected_target, desired_gap=desired_gap, mode=mode, )
